@@ -1,0 +1,52 @@
+# Sistema de Controle de Estoque da Padaria
+
+estoque = {}
+
+def cadastrar_produto():
+    nome = input("Digite o nome do produto: ")
+    quantidade = int(input("Digite a quantidade do produto: "))
+    preco = float(input("Digite o preço do produto: "))
+    
+    # Adiciona o produto ao estoque
+    estoque[nome] = {'quantidade': quantidade, 'preco': preco}
+    print(f"Produto {nome} cadastrado com sucesso!")
+
+def vender_produto():
+    nome = input("Digite o nome do produto vendido: ")
+    quantidade_vendida = int(input("Digite a quantidade vendida: "))
+    
+    if nome in estoque and estoque[nome]['quantidade'] >= quantidade_vendida:
+        estoque[nome]['quantidade'] -= quantidade_vendida
+        print(f"Venda realizada: {quantidade_vendida} unidades de {nome}.")
+    else:
+        print("Produto não disponível ou quantidade insuficiente.")
+
+def relatorio_estoque():
+    print("\nRelatório de Estoque:")
+    for produto, info in estoque.items():
+        print(f"{produto}: {info['quantidade']} unidades, R$ {info['preco']:.2f} cada")
+
+def main():
+    while True:
+        print("\nMenu:")
+        print("1. Cadastrar produto")
+        print("2. Vender produto")
+        print("3. Relatório de estoque")
+        print("4. Sair")
+        
+        opcao = input("Escolha uma opção: ")
+        
+        if opcao == '1':
+            cadastrar_produto()
+        elif opcao == '2':
+            vender_produto()
+        elif opcao == '3':
+            relatorio_estoque()
+        elif opcao == '4':
+            print("Saindo...")
+            break
+        else:
+            print("Opção inválida. Tente novamente.")
+
+if __name__ == "__main__":
+    main()
