@@ -1,0 +1,127 @@
+import sqlite3
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+# Conectar ao banco de dados (ou criar um novo)
+conn = sqlite3.connect('estoque_padaria.db')
+cursor = conn.cursor()
+
+# Criar tabela para o estoque, se não existir
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS produtos (
+    nome TEXT PRIMARY KEY,
+    quantidade INTEGER,
+    preco REAL
+)
+''') 
+
+# Função para cadastrar um novo produto no banco de dados
+def cadastrar_produto():
+    nome = entry_nome.get()
+    quantidade = int(entry_quantidade.get())
+    preco = float(entry_preco.get())
+    
+    try:
+        # Adiciona o produto ao banco de dados
+        cursor.execute('INSERT OR REPLACE INTO produtos (nome, quantidade, preco) VALUES (?, ?, ?)', (nome, quantidade, preco))
+        conn.commit()
+        messagebox.showinfo("Cadastro", f"Produto '{nome}' cadastrado com sucesso!")
+        entry_nome.delete(0, tk.END)
+        entry_quantidade.delete(0, tk.END)
+        entry_preco.delete(0, tk.END)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao cadastrar produto: {e}")
+
+
+# Função para gerar um relatório do estoque atual
+def relatorio_estoque():
+    cursor.execute('SELECT * FROM produtos')
+    produtos = cursor.fetchall()
+    
+    # Criar nova janela para o relatório
+    relatorio_window = tk.Toplevel(root)
+    relatorio_window.title("Relatório de Estoque")
+    
+    # Adicionar uma nova coluna para o nome do produto
+    tree = ttk.Treeview(relatorio_window, columns=('Nome', 'Quantidade', 'Preço'), show='headings')
+    tree.heading('Nome', text='Nome do Produto')  # Cabeçalho para o nome do produto
+    tree.heading('Quantidade', text='Quantidade')
+    tree.heading('Preço', text='Preço')
+    tree.pack(fill=tk.BOTH, expand=True)
+    
+    # Adicionar os produtos ao Treeview, garantindo a ordem correta
+    for produto in produtos:
+        tree.insert('', tk.END, values=(produto[0], produto[1], f'R$ {produto[2]:.2f}'))  # produto[0] é o nome, produto[1] é a quantidade, produto[2] é o preço
+
+
+# Criar uma nova janela para registrar a venda
+
+def vender_produto():
+    
+    venda_window = tk.Toplevel(root)
+    venda_window.title("Registrar Venda")
+
+    # Campos para entrada
+    tk.Label(venda_window, text="Nome do Produto:").pack()
+    entry_nome = tk.Entry(venda_window)
+    entry_nome.pack()
+
+    tk.Label(venda_window, text="Quantidade Vendida:").pack()
+    entry_quantidade = tk.Entry(venda_window)
+    entry_quantidade.pack()
+
+    def registrar_venda():
+        nome = entry_nome.get()
+        quantidade_vendida = int(entry_quantidade.get())
+        
+        # Verificar se o produto existe no banco de dados
+        cursor.execute('SELECT quantidade FROM produtos WHERE nome = ?', (nome,))
+        produto = cursor.fetchone()
+        
+        if produto:
+            quantidade_atual = produto[0]
+            if quantidade_vendida <= quantidade_atual:
+                # Atualizar o estoque
+                nova_quantidade = quantidade_atual - quantidade_vendida
+                cursor.execute('UPDATE produtos SET quantidade = ? WHERE nome = ?', (nova_quantidade, nome))
+                conn.commit()
+                messagebox.showinfo("Venda", f"Venda registrada: {quantidade_vendida} unidades de '{nome}'.")
+            else:
+                messagebox.showwarning("Erro", "Quantidade vendida maior que a disponível em estoque.")
+        else:
+            messagebox.showwarning("Erro", "Produto não encontrado.")
+
+    # Botão para registrar a venda
+    tk.Button(venda_window, text="Registrar Venda", command=registrar_venda).pack()
+
+
+        
+
+
+# Criar a janela principal
+root = tk.Tk()
+root.title("Controle de Estoque da Padaria")
+
+# Widgets para cadastro
+tk.Label(root, text="Nome do Produto:").grid(row=0, column=0)
+entry_nome = tk.Entry(root)
+entry_nome.grid(row=0, column=1)
+
+tk.Label(root, text="Quantidade:").grid(row=1, column=0)
+entry_quantidade = tk.Entry(root)
+entry_quantidade.grid(row=1, column=1)
+
+tk.Label(root, text="Preço:").grid(row=2, column=0)
+entry_preco = tk.Entry(root)
+entry_preco.grid(row=2, column=1)
+
+tk.Button(root, text="Cadastrar Produto", command=cadastrar_produto).grid(row=3, columnspan=2)
+
+tk.Button(root, text="Relatório de Estoque", command=relatorio_estoque).grid(row=4, columnspan=2)
+
+tk.Button (root, text="Vender Produto", command=vender_produto) .grid(row=5, columnspan=2)
+
+# Iniciar a aplicação
+root.mainloop()
+
+# Fechar 
