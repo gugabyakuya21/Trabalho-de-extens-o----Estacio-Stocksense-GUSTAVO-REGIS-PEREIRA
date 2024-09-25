@@ -1,0 +1,250 @@
+import psycopg2
+import tkinter as tk
+from tkinter import messagebox, simpledialog, scrolledtext
+
+def conectar():
+    try:
+        conn = psycopg2.connect(
+            dbname="Bookstore",
+            user="postgres",  # ou o usuário que você estiver usando
+            password="gugabyakuya",
+            host="localhost",
+            port="5432"
+        )
+        print("Conexão bem-sucedida!")
+        return conn
+    except Exception as e:
+        print(f"Erro ao conectar: {e}")
+        return None
+
+def criar_tabela(conn):
+    try:
+        with conn.cursor() as cur:
+            cur.execute(""" 
+                CREATE TABLE IF NOT EXISTS livros (
+                    id SERIAL PRIMARY KEY,
+                    titulo VARCHAR(255) NOT NULL,
+                    autor VARCHAR(255) NOT NULL,
+                    preco NUMERIC(10, 2) NOT NULL,
+                    vendido BOOLEAN DEFAULT FALSE
+                ); 
+            """)
+            conn.commit()
+            print("Tabela 'livros' criada com sucesso!")
+    except Exception as e:
+        print(f"Erro ao criar tabela: {e}")
+
+def inserir_livro(conn, titulo, autor, preco):
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM livros WHERE titulo = %s AND autor = %s;", (titulo, autor))
+            if cur.fetchone() is not None:
+                return "Este livro já está cadastrado!"
+            
+            cur.execute("""INSERT INTO livros (titulo, autor, preco) VALUES (%s, %s, %s);""", (titulo, autor, preco))
+            conn.commit()
+            return "Livro inserido com sucesso!"
+    except Exception as e:
+        return f"Erro ao inserir livro: {e}"
+
+def listar_livros(conn):
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM livros;")
+            livros = cur.fetchall()  # Recupera todos os registros
+            
+            # Cria uma nova janela para exibir os livros
+            janela = tk.Tk()
+            janela.title("Lista de Livros")
+
+            # Cria um Frame para a lista
+            frame = tk.Frame(janela)
+            frame.pack(padx=10, pady=10)
+
+            # Cria um rótulo para cada livro
+            for livro in livros:
+                status = "Vendido" if livro[4] else "Disponível"  # Verifica o status de venda
+                mensagem = f"ID: {livro[0]}, Título: {livro[1]}, Autor: {livro[2]}, Preço: R$ {livro[3]:.2f}, Status: {status}"
+                label = tk.Label(frame, text=mensagem)
+                label.pack(anchor='w')  # Alinha à esquerda
+
+            # Botão para fechar a janela
+            btn_fechar = tk.Button(janela, text="Fechar", command=janela.destroy)
+            btn_fechar.pack(pady=10)
+
+            janela.mainloop()  # Mantém a janela aberta
+
+    except Exception as e:
+        print(f"Erro ao listar livros: {e}")
+        messagebox.showerror("Erro", f"Erro ao listar livros: {e}")
+
+def remover_livro(conn, titulo):
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM livros WHERE titulo = %s;", (titulo,))
+            if cur.rowcount == 0:
+                return "Nenhum livro encontrado com esse título."
+            else:
+                conn.commit()
+                return "Livro removido com sucesso!"
+    except Exception as e:
+        return f"Erro ao remover livro: {e}"
+
+def atualizar_livro(conn, titulo, novo_preco=None, vendido=None):
+    try:
+        with conn.cursor() as cur:
+            if novo_preco is not None:
+                cur.execute("UPDATE livros SET preco = %s WHERE titulo = %s;", (novo_preco, titulo))
+            if vendido is not None:
+                cur.execute("UPDATE livros SET vendido = %s WHERE titulo = %s;", (vendido, titulo))
+            conn.commit()
+            return "Livro atualizado com sucesso!"
+    except Exception as e:
+        return f"Erro ao atualizar livro: {e}"
+
+def filtrar_livros(conn, autor=None, preco_min=None, preco_max=None):
+    try:
+        with conn.cursor() as cur:
+            if autor:
+                cur.execute("SELECT * FROM livros WHERE autor ILIKE %s;", (f'%{autor}%',))
+            elif preco_min is not None and preco_max is not None:
+                cur.execute("SELECT * FROM livros WHERE preco BETWEEN %s AND %s;", (preco_min, preco_max))
+            else:
+                return "Critério de filtro inválido."
+            return cur.fetchall()
+    except Exception as e:
+        return f"Erro ao filtrar livros: {e}"
+
+def vender_livro(conn, id_livro):
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE livros SET vendido = TRUE WHERE id = %s;", (id_livro,))
+            if cur.rowcount == 0:
+                return "Livro não encontrado ou já vendido."
+            else:
+                conn.commit()
+                return "Livro vendido com sucesso!"
+    except Exception as e:
+        return f"Erro ao vender livro: {e}"
+
+def relatorio_vendas(conn):
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT titulo, autor, preco FROM livros WHERE vendido = TRUE;")
+            vendas = cur.fetchall()
+            total_vendas = sum(livro[2] for livro in vendas)
+            return vendas, total_vendas
+    except Exception as e:
+        return None, f"Erro ao gerar relatório de vendas: {e}"
+
+# Funções para a interface gráfica
+class BookstoreApp:
+    def __init__(self, master):
+        self.master = master
+        master.title("Bookstore Management")
+
+        self.conn = conectar()
+        criar_tabela(self.conn)
+
+        self.text_area = scrolledtext.ScrolledText(master, width=80, height=20)
+        self.text_area.pack(pady=10)
+
+        self.button_frame = tk.Frame(master)
+        self.button_frame.pack()
+
+        self.add_book_button = tk.Button(self.button_frame, text="Cadastrar Livro", command=self.cadastrar_livro)
+        self.add_book_button.grid(row=0, column=0, padx=5)
+
+        self.list_books_button = tk.Button(self.button_frame, text="Listar Livros", command=self.listar_livros)
+        self.list_books_button.grid(row=0, column=1, padx=5)
+
+        self.remove_book_button = tk.Button(self.button_frame, text="Remover Livro", command=self.remover_livro)
+        self.remove_book_button.grid(row=0, column=2, padx=5)
+
+        self.update_book_button = tk.Button(self.button_frame, text="Atualizar Livro", command=self.atualizar_livro)
+        self.update_book_button.grid(row=0, column=3, padx=5)
+
+        self.filter_books_button = tk.Button(self.button_frame, text="Filtrar Livros", command=self.filtrar_livros)
+        self.filter_books_button.grid(row=0, column=4, padx=5)
+
+        self.sell_book_button = tk.Button(self.button_frame, text="Vender Livro", command=self.vender_livro)
+        self.sell_book_button.grid(row=0, column=5, padx=5)
+
+        self.report_button = tk.Button(self.button_frame, text="Relatório de Vendas", command=self.gerar_relatorio)
+        self.report_button.grid(row=0, column=6, padx=5)
+
+    def cadastrar_livro(self):
+        titulo = simpledialog.askstring("Título", "Digite o título do livro:")
+        autor = simpledialog.askstring("Autor", "Digite o autor do livro:")
+        preco = simpledialog.askfloat("Preço", "Digite o preço do livro:")
+
+        if titulo and autor and preco is not None:
+            resultado = inserir_livro(self.conn, titulo, autor, preco)
+            messagebox.showinfo("Resultado", resultado)
+        else:
+            messagebox.showwarning("Erro", "Preencha todos os campos.")
+
+    def listar_livros(self):
+        livros = listar_livros(self.conn)
+        self.text_area.delete(1.0, tk.END)
+        if isinstance(livros, str):
+            messagebox.showerror("Erro", livros)
+        else:
+            for livro in livros:
+                self.text_area.insert(tk.END, f"ID: {livro[0]}, Título: {livro[1]}, Autor: {livro[2]}, Preço: {livro[3]}, Vendido: {livro[4]}\n")
+
+    def remover_livro(self):
+        titulo = simpledialog.askstring("Remover Livro", "Digite o título do livro a ser removido:")
+        if titulo:
+            resultado = remover_livro(self.conn, titulo)
+            messagebox.showinfo("Resultado", resultado)
+
+    def atualizar_livro(self):
+        titulo = simpledialog.askstring("Atualizar Livro", "Digite o título do livro a ser atualizado:")
+        if titulo:
+            novo_preco = simpledialog.askfloat("Novo Preço", "Digite o novo preço do livro:")
+            vendido = simpledialog.askstring("Status", "O livro foi vendido? (s/n):").strip().lower() == 's'
+            resultado = atualizar_livro(self.conn, titulo, novo_preco, vendido)
+            messagebox.showinfo("Resultado", resultado)
+
+    def filtrar_livros(self):
+        opcao = simpledialog.askstring("Filtrar Livros", "Filtrar por:\n1. Autor\n2. Faixa de Preço\nEscolha uma opção:")
+        if opcao == "1":
+            autor = simpledialog.askstring("Autor", "Digite o nome do autor:")
+            livros = filtrar_livros(self.conn, autor=autor)
+        elif opcao == "2":
+            preco_min = simpledialog.askfloat("Preço Mínimo", "Digite o preço mínimo:")
+            preco_max = simpledialog.askfloat("Preço Máximo", "Digite o preço máximo:")
+            livros = filtrar_livros(self.conn, preco_min=preco_min, preco_max=preco_max)
+        else:
+            messagebox.showwarning("Erro", "Opção inválida.")
+            return
+
+        self.text_area.delete(1.0, tk.END)
+        if isinstance(livros, str):
+            messagebox.showerror("Erro", livros)
+        else:
+            for livro in livros:
+                self.text_area.insert(tk.END, f"ID: {livro[0]}, Título: {livro[1]}, Autor: {livro[2]}, Preço: {livro[3]}, Vendido: {livro[4]}\n")
+
+    def vender_livro(self):
+        id_livro = simpledialog.askinteger("Vender Livro", "Digite o ID do livro a ser vendido:")
+        if id_livro is not None:
+            resultado = vender_livro(self.conn, id_livro)
+            messagebox.showinfo("Resultado", resultado)
+
+    def gerar_relatorio(self):
+        vendas, erro = relatorio_vendas(self.conn)
+        if vendas is None:
+            messagebox.showerror("Erro", erro)
+        else:
+            self.text_area.delete(1.0, tk.END)
+            total_vendas = sum(livro[2] for livro in vendas)
+            for livro in vendas:
+                self.text_area.insert(tk.END, f"Título: {livro[0]}, Autor: {livro[1]}, Preço: {livro[2]}\n")
+            self.text_area.insert(tk.END, f"\nTotal de Vendas: R${total_vendas:.2f}")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = BookstoreApp(root)
+    root.mainloop()
